@@ -3,7 +3,8 @@ import { validateToken, logout as dbLogout, generateToken, validateAdminCredenti
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (username: string, password: string) => boolean;
+  isLoading: boolean;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   checkAuth: () => boolean;
 }
@@ -12,10 +13,12 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const checkAuth = useCallback(() => {
     const valid = validateToken();
     setIsAuthenticated(valid);
+    setIsLoading(false);
     return valid;
   }, []);
 
@@ -23,8 +26,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, [checkAuth]);
 
-  const login = (username: string, password: string): boolean => {
-    if (validateAdminCredentials(username, password)) {
+  const login = async (username: string, password: string): Promise<boolean> => {
+    const isValid = await validateAdminCredentials(username, password);
+    if (isValid) {
       generateToken();
       setIsAuthenticated(true);
       return true;
@@ -38,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, checkAuth }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, login, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

@@ -4,6 +4,7 @@ import { createAd } from '@/lib/database';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
+import type { AdCategory, AdDuration } from '@/types';
 
 const COUNTRIES = [
   'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
@@ -16,12 +17,41 @@ const COUNTRIES = [
   'Chile', 'Colombia', 'New Zealand', 'Other'
 ];
 
+const CATEGORIES: { value: AdCategory; label: string }[] = [
+  { value: 'electronics', label: 'Electronics' },
+  { value: 'fashion', label: 'Fashion & Apparel' },
+  { value: 'home-garden', label: 'Home & Garden' },
+  { value: 'beauty', label: 'Beauty & Cosmetics' },
+  { value: 'sports', label: 'Sports & Outdoors' },
+  { value: 'automotive', label: 'Automotive' },
+  { value: 'entertainment', label: 'Entertainment' },
+  { value: 'food-dining', label: 'Food & Dining' },
+  { value: 'travel', label: 'Travel & Tourism' },
+  { value: 'services', label: 'Services' },
+  { value: 'real-estate', label: 'Real Estate' },
+  { value: 'jobs', label: 'Jobs & Careers' },
+  { value: 'education', label: 'Education' },
+  { value: 'health', label: 'Health & Wellness' },
+  { value: 'pets', label: 'Pets & Animals' },
+  { value: 'other', label: 'Other' },
+];
+
+const DURATIONS: { value: AdDuration; label: string; description: string }[] = [
+  { value: '1-week', label: '1 Week', description: 'Short promotional campaign' },
+  { value: '2-weeks', label: '2 Weeks', description: 'Standard visibility' },
+  { value: '1-month', label: '1 Month', description: 'Extended exposure' },
+  { value: '2-months', label: '2 Months', description: 'Long-term promotion' },
+  { value: '3-months', label: '3 Months', description: 'Maximum duration' },
+];
+
 export const SubmitPage: React.FC = () => {
   const [formData, setFormData] = useState({
     store_name: '',
     title: '',
     description: '',
     country: '',
+    category: '' as AdCategory | '',
+    duration: '' as AdDuration | '',
     email: '',
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -38,6 +68,20 @@ export const SubmitPage: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleCategorySelect = (category: AdCategory) => {
+    setFormData((prev) => ({ ...prev, category }));
+    if (errors.category) {
+      setErrors((prev) => ({ ...prev, category: '' }));
+    }
+  };
+
+  const handleDurationSelect = (duration: AdDuration) => {
+    setFormData((prev) => ({ ...prev, duration }));
+    if (errors.duration) {
+      setErrors((prev) => ({ ...prev, duration: '' }));
     }
   };
 
@@ -82,6 +126,12 @@ export const SubmitPage: React.FC = () => {
     if (!formData.country) {
       newErrors.country = 'Please select a country';
     }
+    if (!formData.category) {
+      newErrors.category = 'Please select a category';
+    }
+    if (!formData.duration) {
+      newErrors.duration = 'Please select a duration';
+    }
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -102,20 +152,25 @@ export const SubmitPage: React.FC = () => {
 
     setIsSubmitting(true);
 
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      await createAd({
+        store_name: formData.store_name.trim(),
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        country: formData.country,
+        category: formData.category as AdCategory,
+        duration: formData.duration as AdDuration,
+        email: formData.email.trim(),
+        image_data: imageData!,
+      });
 
-    createAd({
-      store_name: formData.store_name.trim(),
-      title: formData.title.trim(),
-      description: formData.description.trim(),
-      country: formData.country,
-      email: formData.email.trim(),
-      image_data: imageData!,
-    });
-
-    setIsSubmitting(false);
-    setIsSubmitted(true);
+      setIsSubmitted(true);
+    } catch (error) {
+      console.error('Failed to submit ad:', error);
+      setErrors({ submit: 'Failed to submit ad. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSubmitted) {
@@ -161,6 +216,8 @@ export const SubmitPage: React.FC = () => {
                   title: '',
                   description: '',
                   country: '',
+                  category: '',
+                  duration: '',
                   email: '',
                 });
                 setImagePreview(null);
@@ -178,7 +235,7 @@ export const SubmitPage: React.FC = () => {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-neutral-50 py-12">
-      <div className="mx-auto max-w-2xl px-4">
+      <div className="mx-auto max-w-3xl px-4">
         <div className="mb-8 text-center">
           <h1 className="mb-2 text-3xl font-bold text-neutral-900">
             Submit Your Ad
@@ -192,128 +249,213 @@ export const SubmitPage: React.FC = () => {
           onSubmit={handleSubmit}
           className="rounded-2xl bg-white p-8 shadow-xl border border-neutral-200"
         >
-          <div className="space-y-6">
-            <Input
-              label="Store Name"
-              name="store_name"
-              placeholder="Your store or business name"
-              value={formData.store_name}
-              onChange={handleInputChange}
-              error={errors.store_name}
-            />
+          <div className="space-y-8">
+            {/* Basic Information */}
+            <div className="space-y-6">
+              <div className="border-b border-neutral-100 pb-4">
+                <h2 className="text-lg font-semibold text-neutral-900">Basic Information</h2>
+                <p className="text-sm text-neutral-500">Tell us about your store and promotion</p>
+              </div>
 
-            <Input
-              label="Ad Title"
-              name="title"
-              placeholder="E.g., 50% Off Summer Sale"
-              value={formData.title}
-              onChange={handleInputChange}
-              error={errors.title}
-            />
-
-            <Textarea
-              label="Description"
-              name="description"
-              placeholder="Describe your promotional offer..."
-              rows={4}
-              value={formData.description}
-              onChange={handleInputChange}
-              error={errors.description}
-            />
-
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-neutral-700">
-                Country
-              </label>
-              <select
-                name="country"
-                value={formData.country}
+              <Input
+                label="Store Name"
+                name="store_name"
+                placeholder="Your store or business name"
+                value={formData.store_name}
                 onChange={handleInputChange}
-                className="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-sm text-neutral-900 transition-all focus:border-neutral-900 focus:outline-none focus:ring-4 focus:ring-neutral-900/10"
-              >
-                <option value="">Select your country</option>
-                {COUNTRIES.map((country) => (
-                  <option key={country} value={country}>
-                    {country}
-                  </option>
+                error={errors.store_name}
+              />
+
+              <Input
+                label="Ad Title"
+                name="title"
+                placeholder="E.g., 50% Off Summer Sale"
+                value={formData.title}
+                onChange={handleInputChange}
+                error={errors.title}
+              />
+
+              <Textarea
+                label="Description"
+                name="description"
+                placeholder="Describe your promotional offer in detail..."
+                rows={4}
+                value={formData.description}
+                onChange={handleInputChange}
+                error={errors.description}
+              />
+            </div>
+
+            {/* Category Selection */}
+            <div className="space-y-4">
+              <div className="border-b border-neutral-100 pb-4">
+                <h2 className="text-lg font-semibold text-neutral-900">Category</h2>
+                <p className="text-sm text-neutral-500">Select where your ad should be listed</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => handleCategorySelect(cat.value)}
+                    className={`flex items-center justify-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
+                      formData.category === cat.value
+                        ? 'border-neutral-900 bg-neutral-900 text-white'
+                        : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50'
+                    }`}
+                  >
+                    <span className="text-sm font-medium">{cat.label}</span>
+                  </button>
                 ))}
-              </select>
-              {errors.country && (
-                <p className="text-xs text-red-600">{errors.country}</p>
+              </div>
+              {errors.category && (
+                <p className="text-xs text-red-600">{errors.category}</p>
               )}
             </div>
 
-            <Input
-              label="Contact Email"
-              name="email"
-              type="email"
-              placeholder="your@email.com"
-              value={formData.email}
-              onChange={handleInputChange}
-              error={errors.email}
-            />
-
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-neutral-700">
-                Ad Image
-              </label>
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className={`relative cursor-pointer overflow-hidden rounded-lg border-2 border-dashed transition-all ${
-                  errors.image
-                    ? 'border-red-300 bg-red-50'
-                    : imagePreview
-                    ? 'border-neutral-300'
-                    : 'border-neutral-300 hover:border-neutral-400 hover:bg-neutral-50'
-                }`}
-              >
-                {imagePreview ? (
-                  <div className="relative aspect-video">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="h-full w-full object-cover"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity hover:opacity-100">
-                      <span className="text-sm font-medium text-white">
-                        Click to change
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <svg
-                      className="mb-3 h-10 w-10 text-neutral-400"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <path d="M21 15l-5-5L5 21" />
-                    </svg>
-                    <p className="mb-1 text-sm font-medium text-neutral-700">
-                      Click to upload image
-                    </p>
-                    <p className="text-xs text-neutral-500">
-                      PNG, JPG up to 5MB
-                    </p>
-                  </div>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="hidden"
-                />
+            {/* Duration Selection */}
+            <div className="space-y-4">
+              <div className="border-b border-neutral-100 pb-4">
+                <h2 className="text-lg font-semibold text-neutral-900">Ad Duration</h2>
+                <p className="text-sm text-neutral-500">Choose how long your ad should be displayed</p>
               </div>
-              {errors.image && (
-                <p className="text-xs text-red-600">{errors.image}</p>
+
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {DURATIONS.map((dur) => (
+                  <button
+                    key={dur.value}
+                    type="button"
+                    onClick={() => handleDurationSelect(dur.value)}
+                    className={`flex flex-col items-center gap-1 rounded-xl border-2 p-4 text-center transition-all ${
+                      formData.duration === dur.value
+                        ? 'border-neutral-900 bg-neutral-900 text-white'
+                        : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50'
+                    }`}
+                  >
+                    <span className="text-lg font-bold">{dur.label}</span>
+                    <span className={`text-xs ${
+                      formData.duration === dur.value ? 'text-neutral-300' : 'text-neutral-500'
+                    }`}>
+                      {dur.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {errors.duration && (
+                <p className="text-xs text-red-600">{errors.duration}</p>
               )}
+            </div>
+
+            {/* Location */}
+            <div className="space-y-4">
+              <div className="border-b border-neutral-100 pb-4">
+                <h2 className="text-lg font-semibold text-neutral-900">Location</h2>
+                <p className="text-sm text-neutral-500">Where is your store located?</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-neutral-700">
+                  Country
+                </label>
+                <select
+                  name="country"
+                  value={formData.country}
+                  onChange={handleInputChange}
+                  className="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-sm text-neutral-900 transition-all focus:border-neutral-900 focus:outline-none focus:ring-4 focus:ring-neutral-900/10"
+                >
+                  <option value="">Select your country</option>
+                  {COUNTRIES.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
+                {errors.country && (
+                  <p className="text-xs text-red-600">{errors.country}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Contact & Image */}
+            <div className="space-y-6">
+              <div className="border-b border-neutral-100 pb-4">
+                <h2 className="text-lg font-semibold text-neutral-900">Contact & Media</h2>
+                <p className="text-sm text-neutral-500">Your contact email and promotional image</p>
+              </div>
+
+              <Input
+                label="Contact Email"
+                name="email"
+                type="email"
+                placeholder="your@email.com"
+                value={formData.email}
+                onChange={handleInputChange}
+                error={errors.email}
+              />
+
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-neutral-700">
+                  Ad Image
+                </label>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`relative cursor-pointer overflow-hidden rounded-lg border-2 border-dashed transition-all ${
+                    errors.image
+                      ? 'border-red-300 bg-red-50'
+                      : imagePreview
+                      ? 'border-neutral-300'
+                      : 'border-neutral-300 hover:border-neutral-400 hover:bg-neutral-50'
+                  }`}
+                >
+                  {imagePreview ? (
+                    <div className="relative aspect-video">
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity hover:opacity-100">
+                        <span className="text-sm font-medium text-white">
+                          Click to change
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <svg
+                        className="mb-3 h-10 w-10 text-neutral-400"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="M21 15l-5-5L5 21" />
+                      </svg>
+                      <p className="mb-1 text-sm font-medium text-neutral-700">
+                        Click to upload image
+                      </p>
+                      <p className="text-xs text-neutral-500">
+                        PNG, JPG up to 5MB
+                      </p>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
+                </div>
+                {errors.image && (
+                  <p className="text-xs text-red-600">{errors.image}</p>
+                )}
+              </div>
             </div>
           </div>
 

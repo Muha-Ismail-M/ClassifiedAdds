@@ -1,12 +1,33 @@
 import React from 'react';
 import { format } from 'date-fns';
-import type { Ad } from '@/types';
+import type { Ad, AdCategory } from '@/types';
 
 interface AdCardProps {
   ad: Ad;
 }
 
+const CATEGORY_INFO: Record<AdCategory, { label: string }> = {
+  'electronics': { label: 'Electronics' },
+  'fashion': { label: 'Fashion' },
+  'home-garden': { label: 'Home & Garden' },
+  'beauty': { label: 'Beauty' },
+  'sports': { label: 'Sports' },
+  'automotive': { label: 'Automotive' },
+  'entertainment': { label: 'Entertainment' },
+  'food-dining': { label: 'Food & Dining' },
+  'travel': { label: 'Travel' },
+  'services': { label: 'Services' },
+  'real-estate': { label: 'Real Estate' },
+  'jobs': { label: 'Jobs' },
+  'education': { label: 'Education' },
+  'health': { label: 'Health' },
+  'pets': { label: 'Pets' },
+  'other': { label: 'Other' },
+};
+
 export const AdCard: React.FC<AdCardProps> = ({ ad }) => {
+  const categoryInfo = ad.category ? CATEGORY_INFO[ad.category] : null;
+
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
       <div className="aspect-[4/3] overflow-hidden bg-neutral-100">
@@ -15,6 +36,11 @@ export const AdCard: React.FC<AdCardProps> = ({ ad }) => {
           alt={ad.title}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
+        {categoryInfo && (
+          <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 backdrop-blur-sm px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm">
+            <span>{categoryInfo.label}</span>
+          </div>
+        )}
       </div>
       
       <div className="p-5">
