@@ -9,8 +9,18 @@ export const AdminLogin: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { login, isAuthenticated, isLoading: authLoading, checkAuth } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const verify = async () => {
+      const isValid = await checkAuth();
+      if (isValid) {
+        navigate('/admin');
+      }
+    };
+    verify();
+  }, [checkAuth, navigate]);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -111,10 +121,6 @@ export const AdminLogin: React.FC = () => {
             </Button>
           </div>
         </form>
-
-        <p className="mt-6 text-center text-xs text-neutral-500">
-          Default credentials: admin / admin123
-        </p>
       </div>
     </div>
   );

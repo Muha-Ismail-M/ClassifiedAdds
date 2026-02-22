@@ -2,25 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useAuth } from '@/context/AuthContext';
-import { 
-  getPendingAds, 
-  getApprovedAds, 
-  approveAd, 
-  deleteAd,
-  changeAdminPassword,
-  exportAllData,
-  importAds,
-  clearAllAds,
-  getDatabaseStats
-} from '@/lib/database';
+import { api, Ad, DatabaseStats } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import type { Ad, AdCategory, AdDuration } from '@/types';
 import { cn } from '@/utils/cn';
 
 type TabType = 'pending' | 'approved' | 'settings' | 'data';
 
-const CATEGORY_INFO: Record<AdCategory, { label: string }> = {
+const CATEGORY_INFO: Record<string, { label: string }> = {
   'electronics': { label: 'Electronics' },
   'fashion': { label: 'Fashion' },
   'home-garden': { label: 'Home & Garden' },
@@ -39,7 +28,7 @@ const CATEGORY_INFO: Record<AdCategory, { label: string }> = {
   'other': { label: 'Other' },
 };
 
-const DURATION_LABELS: Record<AdDuration, string> = {
+const DURATION_LABELS: Record<string, string> = {
   '1-week': '1 Week',
   '2-weeks': '2 Weeks',
   '1-month': '1 Month',
@@ -59,12 +48,9 @@ export const AdminDashboard: React.FC = () => {
   const loadAds = useCallback(async () => {
     setLoading(true);
     try {
-      const [pending, approved] = await Promise.all([
-        getPendingAds(),
-        getApprovedAds()
-      ]);
-      setPendingAds(pending);
-      setApprovedAds(approved);
+      const result = await api.getAllAds();
+      setPendingAds(result.pending);
+      setApprovedAds(result.approved);
     } catch (error) {
       console.error('Failed to load ads:', error);
     } finally {
@@ -73,15 +59,19 @@ export const AdminDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!checkAuth()) {
-      navigate('/admin/login');
-      return;
-    }
-    loadAds();
+    const init = async () => {
+      const isValid = await checkAuth();
+      if (!isValid) {
+        navigate('/admin/login');
+        return;
+      }
+      loadAds();
+    };
+    init();
   }, [checkAuth, navigate, loadAds]);
 
   const handleApprove = async (id: string) => {
-    const success = await approveAd(id);
+    const success = await api.approveAd(id);
     if (success) {
       await loadAds();
     }
@@ -89,7 +79,7 @@ export const AdminDashboard: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this ad?')) {
-      const success = await deleteAd(id);
+      const success = await api.deleteAd(id);
       if (success) {
         await loadAds();
       }
@@ -420,6 +410,7 @@ const AdListItem: React.FC<{
   const [expanded, setExpanded] = useState(false);
   const categoryInfo = ad.category ? CATEGORY_INFO[ad.category] : null;
   const durationLabel = ad.duration ? DURATION_LABELS[ad.duration] : null;
+  const imageSource = ad.image_url;
 
   return (
     <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow-md">
@@ -429,7 +420,7 @@ const AdListItem: React.FC<{
       >
         <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-neutral-100">
           <img
-            src={ad.image_data}
+            src={imageSource}
             alt={ad.title}
             className="h-full w-full object-cover"
           />
@@ -484,7 +475,7 @@ const AdListItem: React.FC<{
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <img
-                src={ad.image_data}
+                src={imageSource}
                 alt={ad.title}
                 className="w-full rounded-lg"
               />
@@ -535,15 +526,8 @@ const AdListItem: React.FC<{
 };
 
 const DataManagementSection: React.FC<{ onDataChange: () => void }> = ({ onDataChange }) => {
-  const [stats, setStats] = useState<{
-    totalAds: number;
-    pendingAds: number;
-    approvedAds: number;
-    expiredAds: number;
-    categoryCounts: Record<string, number>;
-  } | null>(null);
+  const [stats, setStats] = useState<DatabaseStats | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -551,7 +535,7 @@ const DataManagementSection: React.FC<{ onDataChange: () => void }> = ({ onDataC
   }, []);
 
   const loadStats = async () => {
-    const data = await getDatabaseStats();
+    const data = await api.getStats();
     setStats(data);
   };
 
@@ -559,48 +543,23 @@ const DataManagementSection: React.FC<{ onDataChange: () => void }> = ({ onDataC
     setExporting(true);
     setMessage(null);
     try {
-      const data = await exportAllData();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `classified-ads-backup-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setMessage({ type: 'success', text: 'Data exported successfully!' });
+      const data = await api.exportData();
+      if (data) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `classified-ads-backup-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setMessage({ type: 'success', text: 'Data exported successfully!' });
+      }
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to export data.' });
     } finally {
       setExporting(false);
-    }
-  };
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setImporting(true);
-    setMessage(null);
-
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      
-      if (!data.ads || !Array.isArray(data.ads)) {
-        throw new Error('Invalid backup file format');
-      }
-
-      const count = await importAds(data.ads, true);
-      setMessage({ type: 'success', text: `Successfully imported ${count} ads!` });
-      onDataChange();
-      loadStats();
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to import data. Please check the file format.' });
-    } finally {
-      setImporting(false);
-      e.target.value = '';
     }
   };
 
@@ -613,10 +572,12 @@ const DataManagementSection: React.FC<{ onDataChange: () => void }> = ({ onDataC
     }
 
     try {
-      await clearAllAds();
-      setMessage({ type: 'success', text: 'All ads have been deleted.' });
-      onDataChange();
-      loadStats();
+      const success = await api.clearAllAds();
+      if (success) {
+        setMessage({ type: 'success', text: 'All ads have been deleted.' });
+        onDataChange();
+        loadStats();
+      }
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to clear ads.' });
     }
@@ -660,44 +621,20 @@ const DataManagementSection: React.FC<{ onDataChange: () => void }> = ({ onDataC
         )}
       </div>
 
-      {/* Export/Import */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-2 text-lg font-semibold text-neutral-900">Export Data</h2>
-          <p className="mb-4 text-sm text-neutral-500">
-            Download all ads as a JSON backup file. This includes all pending and approved ads with their images.
-          </p>
-          <Button onClick={handleExport} loading={exporting}>
-            <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export Backup
-          </Button>
-        </div>
-
-        <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-2 text-lg font-semibold text-neutral-900">Import Data</h2>
-          <p className="mb-4 text-sm text-neutral-500">
-            Restore ads from a backup file. This will replace all existing ads with the imported data.
-          </p>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-neutral-800">
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            {importing ? 'Importing...' : 'Import Backup'}
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleImport}
-              disabled={importing}
-              className="hidden"
-            />
-          </label>
-        </div>
+      {/* Export */}
+      <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-2 text-lg font-semibold text-neutral-900">Export Data</h2>
+        <p className="mb-4 text-sm text-neutral-500">
+          Download all ads as a JSON backup file.
+        </p>
+        <Button onClick={handleExport} loading={exporting}>
+          <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export Backup
+        </Button>
       </div>
 
       {/* Danger Zone */}
@@ -744,15 +681,15 @@ const SettingsSection: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const result = await changeAdminPassword(currentPassword, newPassword);
+      const result = await api.changePassword(currentPassword, newPassword);
 
-      if (result) {
+      if (result.success) {
         setSuccess('Password changed successfully');
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
       } else {
-        setError('Current password is incorrect');
+        setError(result.error || 'Current password is incorrect');
       }
     } catch (err) {
       setError('Failed to change password');

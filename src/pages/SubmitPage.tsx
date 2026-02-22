@@ -1,10 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { createAd } from '@/lib/database';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
-import type { AdCategory, AdDuration } from '@/types';
 
 const COUNTRIES = [
   'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
@@ -17,7 +16,7 @@ const COUNTRIES = [
   'Chile', 'Colombia', 'New Zealand', 'Other'
 ];
 
-const CATEGORIES: { value: AdCategory; label: string }[] = [
+const CATEGORIES: { value: string; label: string }[] = [
   { value: 'electronics', label: 'Electronics' },
   { value: 'fashion', label: 'Fashion & Apparel' },
   { value: 'home-garden', label: 'Home & Garden' },
@@ -36,7 +35,7 @@ const CATEGORIES: { value: AdCategory; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-const DURATIONS: { value: AdDuration; label: string; description: string }[] = [
+const DURATIONS: { value: string; label: string; description: string }[] = [
   { value: '1-week', label: '1 Week', description: 'Short promotional campaign' },
   { value: '2-weeks', label: '2 Weeks', description: 'Standard visibility' },
   { value: '1-month', label: '1 Month', description: 'Extended exposure' },
@@ -50,12 +49,12 @@ export const SubmitPage: React.FC = () => {
     title: '',
     description: '',
     country: '',
-    category: '' as AdCategory | '',
-    duration: '' as AdDuration | '',
+    category: '',
+    duration: '',
     email: '',
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageData, setImageData] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -71,14 +70,14 @@ export const SubmitPage: React.FC = () => {
     }
   };
 
-  const handleCategorySelect = (category: AdCategory) => {
+  const handleCategorySelect = (category: string) => {
     setFormData((prev) => ({ ...prev, category }));
     if (errors.category) {
       setErrors((prev) => ({ ...prev, category: '' }));
     }
   };
 
-  const handleDurationSelect = (duration: AdDuration) => {
+  const handleDurationSelect = (duration: string) => {
     setFormData((prev) => ({ ...prev, duration }));
     if (errors.duration) {
       setErrors((prev) => ({ ...prev, duration: '' }));
@@ -101,11 +100,11 @@ export const SubmitPage: React.FC = () => {
       return;
     }
 
+    setImageFile(file);
+    
     const reader = new FileReader();
     reader.onloadend = () => {
-      const result = reader.result as string;
-      setImagePreview(result);
-      setImageData(result);
+      setImagePreview(reader.result as string);
       setErrors((prev) => ({ ...prev, image: '' }));
     };
     reader.readAsDataURL(file);
@@ -137,7 +136,7 @@ export const SubmitPage: React.FC = () => {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
-    if (!imageData) {
+    if (!imageFile) {
       newErrors.image = 'Please upload an image';
     }
 
@@ -153,18 +152,23 @@ export const SubmitPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      await createAd({
-        store_name: formData.store_name.trim(),
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        country: formData.country,
-        category: formData.category as AdCategory,
-        duration: formData.duration as AdDuration,
-        email: formData.email.trim(),
-        image_data: imageData!,
-      });
+      const submitData = new FormData();
+      submitData.append('store_name', formData.store_name.trim());
+      submitData.append('title', formData.title.trim());
+      submitData.append('description', formData.description.trim());
+      submitData.append('country', formData.country);
+      submitData.append('category', formData.category);
+      submitData.append('duration', formData.duration);
+      submitData.append('email', formData.email.trim());
+      submitData.append('image', imageFile!);
 
-      setIsSubmitted(true);
+      const result = await api.submitAd(submitData);
+
+      if (result.success) {
+        setIsSubmitted(true);
+      } else {
+        setErrors({ submit: result.error || 'Failed to submit ad. Please try again.' });
+      }
     } catch (error) {
       console.error('Failed to submit ad:', error);
       setErrors({ submit: 'Failed to submit ad. Please try again.' });
@@ -221,7 +225,7 @@ export const SubmitPage: React.FC = () => {
                   email: '',
                 });
                 setImagePreview(null);
-                setImageData(null);
+                setImageFile(null);
               }}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-white px-5 py-2.5 text-sm font-medium text-neutral-700 transition-all hover:bg-neutral-50"
             >
@@ -249,6 +253,12 @@ export const SubmitPage: React.FC = () => {
           onSubmit={handleSubmit}
           className="rounded-2xl bg-white p-8 shadow-xl border border-neutral-200"
         >
+          {errors.submit && (
+            <div className="mb-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+              {errors.submit}
+            </div>
+          )}
+
           <div className="space-y-8">
             {/* Basic Information */}
             <div className="space-y-6">

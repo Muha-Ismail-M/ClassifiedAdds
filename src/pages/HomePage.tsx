@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { getApprovedAds } from '@/lib/database';
+import { api, Ad } from '@/lib/api';
 import { AdCard } from '@/components/ui/AdCard';
-import type { Ad, AdCategory } from '@/types';
 import { cn } from '@/utils/cn';
 
 type SortOption = 'newest' | 'oldest' | 'title-asc' | 'title-desc' | 'store-asc' | 'store-desc';
 
-const CATEGORIES: { value: AdCategory | 'all'; label: string }[] = [
+const CATEGORIES: { value: string; label: string }[] = [
   { value: 'all', label: 'All Categories' },
   { value: 'electronics', label: 'Electronics' },
   { value: 'fashion', label: 'Fashion' },
@@ -39,14 +38,14 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 export const HomePage: React.FC = () => {
   const [ads, setAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<AdCategory | 'all'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     const loadAds = async () => {
       try {
-        const approvedAds = await getApprovedAds();
+        const approvedAds = await api.getApprovedAds();
         setAds(approvedAds);
       } catch (error) {
         console.error('Failed to load ads:', error);

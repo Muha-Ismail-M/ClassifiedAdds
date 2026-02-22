@@ -1,12 +1,21 @@
 import React from 'react';
 import { format } from 'date-fns';
-import type { Ad, AdCategory } from '@/types';
 
 interface AdCardProps {
-  ad: Ad;
+  ad: {
+    id: string;
+    store_name: string;
+    title: string;
+    description: string;
+    country: string;
+    category: string;
+    image_url?: string;
+    image_data?: string;
+    created_at: string;
+  };
 }
 
-const CATEGORY_INFO: Record<AdCategory, { label: string }> = {
+const CATEGORY_INFO: Record<string, { label: string }> = {
   'electronics': { label: 'Electronics' },
   'fashion': { label: 'Fashion' },
   'home-garden': { label: 'Home & Garden' },
@@ -27,12 +36,13 @@ const CATEGORY_INFO: Record<AdCategory, { label: string }> = {
 
 export const AdCard: React.FC<AdCardProps> = ({ ad }) => {
   const categoryInfo = ad.category ? CATEGORY_INFO[ad.category] : null;
+  const imageSource = ad.image_url || ad.image_data;
 
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
       <div className="aspect-[4/3] overflow-hidden bg-neutral-100">
         <img
-          src={ad.image_data}
+          src={imageSource}
           alt={ad.title}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />

@@ -1,7 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { initializeDatabase } from './lib/database';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { HomePage } from './pages/HomePage';
@@ -11,11 +10,24 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, checkAuth } = useAuth();
-  
+  const { isAuthenticated, isLoading, checkAuth } = useAuth();
+  const [checked, setChecked] = useState(false);
+
   useEffect(() => {
-    checkAuth();
+    const verify = async () => {
+      await checkAuth();
+      setChecked(true);
+    };
+    verify();
   }, [checkAuth]);
+
+  if (isLoading || !checked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-neutral-100">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-900" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/admin/login" replace />;
@@ -24,12 +36,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-// Initialize the app
+// Main App Content
 const AppContent: React.FC = () => {
-  useEffect(() => {
-    initializeDatabase();
-  }, []);
-
   return (
     <BrowserRouter>
       <div className="flex min-h-screen flex-col">

@@ -37,9 +37,6 @@ export const Footer: React.FC = () => {
             <Link to="/submit" className="transition-colors hover:text-neutral-900">
               Submit Ad
             </Link>
-            <Link to="/admin" className="transition-colors hover:text-neutral-900">
-              Admin
-            </Link>
           </div>
 
           <p className="text-sm text-neutral-400">

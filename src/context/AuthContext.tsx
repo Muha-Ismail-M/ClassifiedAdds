@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { validateToken, logout as dbLogout, generateToken, validateAdminCredentials } from '../lib/database';
+import { api } from '../lib/api';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
-  checkAuth: () => boolean;
+  checkAuth: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -15,11 +15,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const checkAuth = useCallback(() => {
-    const valid = validateToken();
-    setIsAuthenticated(valid);
-    setIsLoading(false);
-    return valid;
+  const checkAuth = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const valid = await api.validateToken();
+      setIsAuthenticated(valid);
+      return valid;
+    } catch {
+      setIsAuthenticated(false);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -27,9 +34,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [checkAuth]);
 
   const login = async (username: string, password: string): Promise<boolean> => {
-    const isValid = await validateAdminCredentials(username, password);
-    if (isValid) {
-      generateToken();
+    const result = await api.login(username, password);
+    if (result.success) {
       setIsAuthenticated(true);
       return true;
     }
@@ -37,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    dbLogout();
+    api.logout();
     setIsAuthenticated(false);
   };
 
