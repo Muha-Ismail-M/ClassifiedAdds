@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 
 // Ensure uploads directory exists
-const uploadsDir = process.env.UPLOAD_PATH || './uploads';
+const uploadsDir = process.env.UPLOAD_PATH || path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -46,6 +46,7 @@ function deleteFile(filePath) {
     const fullPath = path.join(uploadsDir, path.basename(filePath));
     if (fs.existsSync(fullPath)) {
       fs.unlinkSync(fullPath);
+      console.log(`File deleted: ${path.basename(filePath)}`);
       return true;
     }
   } catch (error) {

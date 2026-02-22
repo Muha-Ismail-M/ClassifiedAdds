@@ -6,7 +6,14 @@ const { deleteFile } = require('../middleware/upload');
 
 const router = express.Router();
 
-// POST /api/admin/login - Admin login
+// Helper to get the base URL (works with ngrok/cloudflare tunnels)
+function getBaseUrl(req) {
+  const forwardedProto = req.headers['x-forwarded-proto'] || req.protocol;
+  const forwardedHost = req.headers['x-forwarded-host'] || req.headers['host'];
+  return `${forwardedProto}://${forwardedHost}`;
+}
+
+// POST /api/admin/login
 router.post('/login', (req, res) => {
   try {
     const { username, password } = req.body;
@@ -33,6 +40,8 @@ router.post('/login', (req, res) => {
       role: 'admin' 
     });
     
+    console.log(`Admin logged in: ${username}`);
+    
     res.json({ token, message: 'Login successful' });
   } catch (error) {
     console.error('Login error:', error);
@@ -40,7 +49,7 @@ router.post('/login', (req, res) => {
   }
 });
 
-// GET /api/admin/validate - Validate token
+// GET /api/admin/validate
 router.get('/validate', (req, res) => {
   const authHeader = req.headers.authorization;
   
@@ -57,7 +66,7 @@ router.get('/validate', (req, res) => {
 // GET /api/admin/ads - Get all ads (protected)
 router.get('/ads', authMiddleware, (req, res) => {
   try {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = getBaseUrl(req);
     
     const pending = db.prepare(`
       SELECT * FROM ads WHERE status = 'pending' ORDER BY created_at DESC
@@ -80,10 +89,10 @@ router.get('/ads', authMiddleware, (req, res) => {
   }
 });
 
-// GET /api/admin/ads/pending - Get pending ads (protected)
+// GET /api/admin/ads/pending
 router.get('/ads/pending', authMiddleware, (req, res) => {
   try {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = getBaseUrl(req);
     
     const ads = db.prepare(`
       SELECT * FROM ads WHERE status = 'pending' ORDER BY created_at DESC
@@ -99,7 +108,7 @@ router.get('/ads/pending', authMiddleware, (req, res) => {
   }
 });
 
-// PUT /api/admin/ads/:id/approve - Approve an ad (protected)
+// PUT /api/admin/ads/:id/approve
 router.put('/ads/:id/approve', authMiddleware, (req, res) => {
   try {
     const { id } = req.params;
@@ -112,6 +121,8 @@ router.put('/ads/:id/approve', authMiddleware, (req, res) => {
     
     db.prepare('UPDATE ads SET status = ? WHERE id = ?').run('approved', id);
     
+    console.log(`Ad approved: "${ad.title}"`);
+    
     res.json({ success: true, message: 'Ad approved successfully' });
   } catch (error) {
     console.error('Error approving ad:', error);
@@ -119,7 +130,7 @@ router.put('/ads/:id/approve', authMiddleware, (req, res) => {
   }
 });
 
-// DELETE /api/admin/ads/:id - Delete an ad (protected)
+// DELETE /api/admin/ads/:id
 router.delete('/ads/:id', authMiddleware, (req, res) => {
   try {
     const { id } = req.params;
@@ -138,6 +149,8 @@ router.delete('/ads/:id', authMiddleware, (req, res) => {
     // Delete from database
     db.prepare('DELETE FROM ads WHERE id = ?').run(id);
     
+    console.log(`Ad deleted: "${ad.title}"`);
+    
     res.json({ success: true, message: 'Ad deleted successfully' });
   } catch (error) {
     console.error('Error deleting ad:', error);
@@ -145,13 +158,13 @@ router.delete('/ads/:id', authMiddleware, (req, res) => {
   }
 });
 
-// PUT /api/admin/password - Change admin password (protected)
+// PUT /api/admin/password
 router.put('/password', authMiddleware, (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current password and new password are required' });
+      return res.status(400).json({ error: 'Current and new password are required' });
     }
     
     if (newPassword.length < 6) {
@@ -175,6 +188,8 @@ router.put('/password', authMiddleware, (req, res) => {
     db.prepare('UPDATE admin SET password_hash = ?, updated_at = ? WHERE id = ?')
       .run(newHash, new Date().toISOString(), admin.id);
     
+    console.log('Admin password changed');
+    
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
     console.error('Error changing password:', error);
@@ -182,7 +197,7 @@ router.put('/password', authMiddleware, (req, res) => {
   }
 });
 
-// GET /api/admin/stats - Get database statistics (protected)
+// GET /api/admin/stats
 router.get('/stats', authMiddleware, (req, res) => {
   try {
     const now = new Date().toISOString();
@@ -199,7 +214,7 @@ router.get('/stats', authMiddleware, (req, res) => {
   }
 });
 
-// GET /api/admin/export - Export all data (protected)
+// GET /api/admin/export
 router.get('/export', authMiddleware, (req, res) => {
   try {
     const ads = db.prepare('SELECT * FROM ads ORDER BY created_at DESC').all();
@@ -215,21 +230,20 @@ router.get('/export', authMiddleware, (req, res) => {
   }
 });
 
-// DELETE /api/admin/ads/clear - Clear all ads (protected)
+// DELETE /api/admin/ads/clear
 router.delete('/ads/clear', authMiddleware, (req, res) => {
   try {
-    // Get all ads to delete their images
     const ads = db.prepare('SELECT image_path FROM ads').all();
     
-    // Delete all image files
     ads.forEach(ad => {
       if (ad.image_path) {
         deleteFile(ad.image_path);
       }
     });
     
-    // Clear the database
     db.prepare('DELETE FROM ads').run();
+    
+    console.log('All ads cleared');
     
     res.json({ success: true, message: 'All ads deleted successfully' });
   } catch (error) {

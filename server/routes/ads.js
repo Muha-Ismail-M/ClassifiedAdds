@@ -14,10 +14,19 @@ const DURATION_DAYS = {
   '3-months': 90
 };
 
+// Helper to get the base URL (works with ngrok/cloudflare tunnels)
+function getBaseUrl(req) {
+  // Check forwarded headers from tunnels/proxies
+  const forwardedProto = req.headers['x-forwarded-proto'] || req.protocol;
+  const forwardedHost = req.headers['x-forwarded-host'] || req.headers['host'];
+  return `${forwardedProto}://${forwardedHost}`;
+}
+
 // GET /api/ads - Get all approved ads (public)
 router.get('/', (req, res) => {
   try {
     const now = new Date().toISOString();
+    const baseUrl = getBaseUrl(req);
     
     const ads = db.prepare(`
       SELECT * FROM ads 
@@ -25,8 +34,6 @@ router.get('/', (req, res) => {
       ORDER BY created_at DESC
     `).all(now);
     
-    // Add full image URL
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
     const adsWithUrls = ads.map(ad => ({
       ...ad,
       image_url: `${baseUrl}/uploads/${ad.image_path}`
@@ -95,6 +102,8 @@ router.post('/', upload.single('image'), (req, res) => {
       createdAt.toISOString(),
       expiresAt.toISOString()
     );
+    
+    console.log(`New ad submitted: "${sanitizedData.title}" by ${sanitizedData.store_name}`);
     
     res.status(201).json({ 
       success: true, 

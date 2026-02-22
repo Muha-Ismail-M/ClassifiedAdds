@@ -1,46 +1,10 @@
-// API Service - Communicates with the backend
-const API_URL = import.meta.env.VITE_API_URL || 'https://your-backend-url.onrender.com/api';
+// =============================================================================
+// BACKEND API CLIENT
+// Set VITE_API_URL in your .env file or Vercel environment variables
+// Example: VITE_API_URL=https://your-ngrok-url.ngrok-free.app/api
+// =============================================================================
 
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
-// Helper function for API calls
-async function apiCall<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<ApiResponse<T>> {
-  const token = localStorage.getItem('classified_ads_auth_token');
-  
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
-
-  if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-  }
-
-  try {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return { success: false, error: data.error || 'Request failed' };
-    }
-
-    return { success: true, data };
-  } catch (error) {
-    console.error('API Error:', error);
-    return { success: false, error: 'Network error. Please try again.' };
-  }
-}
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Types
 export interface Ad {
@@ -52,21 +16,11 @@ export interface Ad {
   category: string;
   duration: string;
   image_url: string;
+  image_path?: string;
   email: string;
   status: 'pending' | 'approved';
   created_at: string;
   expires_at: string;
-}
-
-export interface AdSubmission {
-  store_name: string;
-  title: string;
-  description: string;
-  country: string;
-  category: string;
-  duration: string;
-  email: string;
-  image: File;
 }
 
 export interface DatabaseStats {
@@ -76,126 +30,234 @@ export interface DatabaseStats {
   expiredAds: number;
 }
 
-// Public API
+// Token management
+function getToken(): string | null {
+  return localStorage.getItem('classified_ads_token');
+}
+
+function setToken(token: string): void {
+  localStorage.setItem('classified_ads_token', token);
+}
+
+function removeToken(): void {
+  localStorage.removeItem('classified_ads_token');
+}
+
+// Authenticated fetch helper
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string> || {}),
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Don't set Content-Type for FormData (browser sets it with boundary)
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return fetch(url, {
+    ...options,
+    headers,
+  });
+}
+
+// API methods
 export const api = {
+  // ========== PUBLIC ENDPOINTS ==========
+
   // Get all approved ads (public)
   async getApprovedAds(): Promise<Ad[]> {
-    const response = await apiCall<{ ads: Ad[] }>('/ads');
-    return response.data?.ads || [];
+    try {
+      const res = await fetch(`${API_BASE}/ads`);
+      if (!res.ok) throw new Error('Failed to fetch ads');
+      const data = await res.json();
+      return data.ads || [];
+    } catch (error) {
+      console.error('Error fetching ads:', error);
+      return [];
+    }
   },
 
   // Submit a new ad (public)
   async submitAd(formData: FormData): Promise<{ success: boolean; error?: string }> {
-    const token = localStorage.getItem('classified_ads_auth_token');
-    
-    const headers: HeadersInit = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     try {
-      const response = await fetch(`${API_URL}/ads`, {
+      const res = await fetch(`${API_BASE}/ads`, {
         method: 'POST',
-        headers,
-        body: formData, // FormData for file upload
+        body: formData,
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        return { success: false, error: data.error || 'Submission failed' };
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to submit ad' };
       }
 
       return { success: true };
     } catch (error) {
-      console.error('Submit Ad Error:', error);
-      return { success: false, error: 'Network error. Please try again.' };
+      console.error('Submit error:', error);
+      return { success: false, error: 'Failed to connect to server. Please try again later.' };
     }
   },
 
+  // ========== AUTH ENDPOINTS ==========
+
   // Admin login
   async login(username: string, password: string): Promise<{ success: boolean; token?: string; error?: string }> {
-    const response = await apiCall<{ token: string }>('/admin/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
+    try {
+      const res = await authFetch(`${API_BASE}/admin/login`, {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      });
 
-    if (response.success && response.data?.token) {
-      localStorage.setItem('classified_ads_auth_token', response.data.token);
-      return { success: true, token: response.data.token };
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Invalid credentials' };
+      }
+
+      if (data.token) {
+        setToken(data.token);
+      }
+
+      return { success: true, token: data.token };
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: 'Failed to connect to server.' };
     }
-
-    return { success: false, error: response.error || 'Login failed' };
   },
 
   // Admin logout
   logout(): void {
-    localStorage.removeItem('classified_ads_auth_token');
+    removeToken();
   },
 
   // Validate token
   async validateToken(): Promise<boolean> {
-    const token = localStorage.getItem('classified_ads_auth_token');
+    const token = getToken();
     if (!token) return false;
 
-    const response = await apiCall<{ valid: boolean }>('/admin/validate');
-    return response.success && response.data?.valid === true;
+    try {
+      const res = await authFetch(`${API_BASE}/admin/validate`);
+      const data = await res.json();
+      return data.valid === true;
+    } catch {
+      return false;
+    }
   },
+
+  // ========== ADMIN ENDPOINTS ==========
 
   // Get all ads (admin)
   async getAllAds(): Promise<{ pending: Ad[]; approved: Ad[] }> {
-    const response = await apiCall<{ pending: Ad[]; approved: Ad[] }>('/admin/ads');
-    return response.data || { pending: [], approved: [] };
+    try {
+      const res = await authFetch(`${API_BASE}/admin/ads`);
+      if (!res.ok) throw new Error('Failed to fetch ads');
+      const data = await res.json();
+      return { pending: data.pending || [], approved: data.approved || [] };
+    } catch (error) {
+      console.error('Error fetching all ads:', error);
+      return { pending: [], approved: [] };
+    }
   },
 
   // Get pending ads (admin)
   async getPendingAds(): Promise<Ad[]> {
-    const response = await apiCall<{ ads: Ad[] }>('/admin/ads/pending');
-    return response.data?.ads || [];
+    try {
+      const res = await authFetch(`${API_BASE}/admin/ads/pending`);
+      if (!res.ok) throw new Error('Failed to fetch pending ads');
+      const data = await res.json();
+      return data.ads || [];
+    } catch (error) {
+      console.error('Error fetching pending ads:', error);
+      return [];
+    }
   },
 
   // Approve ad (admin)
   async approveAd(id: string): Promise<boolean> {
-    const response = await apiCall<{ success: boolean }>(`/admin/ads/${id}/approve`, {
-      method: 'PUT',
-    });
-    return response.success;
+    try {
+      const res = await authFetch(`${API_BASE}/admin/ads/${id}/approve`, {
+        method: 'PUT',
+      });
+      return res.ok;
+    } catch (error) {
+      console.error('Error approving ad:', error);
+      return false;
+    }
   },
 
   // Delete ad (admin)
   async deleteAd(id: string): Promise<boolean> {
-    const response = await apiCall<{ success: boolean }>(`/admin/ads/${id}`, {
-      method: 'DELETE',
-    });
-    return response.success;
+    try {
+      const res = await authFetch(`${API_BASE}/admin/ads/${id}`, {
+        method: 'DELETE',
+      });
+      return res.ok;
+    } catch (error) {
+      console.error('Error deleting ad:', error);
+      return false;
+    }
   },
 
   // Change password (admin)
   async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
-    const response = await apiCall<{ success: boolean }>('/admin/password', {
-      method: 'PUT',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-    return { success: response.success, error: response.error };
+    try {
+      const res = await authFetch(`${API_BASE}/admin/password`, {
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to change password' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error changing password:', error);
+      return { success: false, error: 'Failed to connect to server.' };
+    }
   },
 
   // Get database stats (admin)
   async getStats(): Promise<DatabaseStats | null> {
-    const response = await apiCall<DatabaseStats>('/admin/stats');
-    return response.data || null;
+    try {
+      const res = await authFetch(`${API_BASE}/admin/stats`);
+      if (!res.ok) throw new Error('Failed to fetch stats');
+      return await res.json();
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      return null;
+    }
   },
 
   // Export data (admin)
   async exportData(): Promise<{ ads: Ad[]; exportedAt: string } | null> {
-    const response = await apiCall<{ ads: Ad[]; exportedAt: string }>('/admin/export');
-    return response.data || null;
+    try {
+      const res = await authFetch(`${API_BASE}/admin/export`);
+      if (!res.ok) throw new Error('Failed to export data');
+      return await res.json();
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      return null;
+    }
   },
 
   // Clear all ads (admin)
   async clearAllAds(): Promise<boolean> {
-    const response = await apiCall<{ success: boolean }>('/admin/ads/clear', {
-      method: 'DELETE',
-    });
-    return response.success;
+    try {
+      const res = await authFetch(`${API_BASE}/admin/ads/clear`, {
+        method: 'DELETE',
+      });
+      return res.ok;
+    } catch (error) {
+      console.error('Error clearing ads:', error);
+      return false;
+    }
   },
 };
